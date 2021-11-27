@@ -1,6 +1,7 @@
 """To modify only the Json Value."""
 # %% Import
 # Standard library imports
+import re
 import sys
 from typing import Tuple
 
@@ -190,12 +191,12 @@ class JsonValueEditor(QsciScintilla):
         line_no, _ = self.getCursorPosition()
         chars_allowed = self.line_infos[line_no].chars_allowed
 
+        ctrl_only_pressed = e.modifiers() == Qt.ControlModifier
         key = e.key()
         if key == Qt.Key_Space:
             key_char = " "
         else:
             key_char = QKeySequence(key).toString()
-        ctrl_only_pressed = e.modifiers() == Qt.ControlModifier
 
         if self.mouse_clicked or key in [Qt.Key_Return]:
             return
@@ -212,17 +213,18 @@ class JsonValueEditor(QsciScintilla):
             Qt.Key_PageUp,
         ]:  # Arrow keys
             super().keyPressEvent(e)
+        elif self.hasSelectedText():
+            if key_char in chars_allowed or key in [Qt.Key_Backspace, Qt.Key_Delete]:
+                if set(self.selectedText()) <= set(chars_allowed):
+                    super().keyPressEvent(e)
         elif key_char in chars_allowed:
             super().keyPressEvent(e)
-        elif self.hasSelectedText() and key in [Qt.Key_Backspace, Qt.Key_Delete]:
-            super().keyPressEvent(e)
-        elif key == Qt.Key_Backspace:
-            char_prev = self.get_prev_char()
-            if char_prev in chars_allowed:
-                super().keyPressEvent(e)
-        elif key == Qt.Key_Delete:
-            char_post = self.get_post_char()
-            if char_post in chars_allowed:
+        elif key in [Qt.Key_Backspace, Qt.Key_Delete]:
+            if key == Qt.Key_Backspace:
+                char = self.get_prev_char()
+            else:
+                char = self.get_post_char()
+            if char in chars_allowed:
                 super().keyPressEvent(e)
 
         self.validate_selection()

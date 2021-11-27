@@ -36,7 +36,7 @@ class LineInfo:
 
         self.chars_allowed: str = ""  # Editable charaters in editor.
         if val_type in [ValueKind.NUM, ValueKind.NUM_LIST]:
-            self.chars_allowed = "-.0123456789eE"
+            self.chars_allowed = "-.0123456789eE "
         elif val_type == ValueKind.STR:
             self.chars_allowed = (
                 "0123456789"
