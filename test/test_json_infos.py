@@ -21,7 +21,7 @@ JSON_EXAMPLE = """
 
 def test_pos_of_value():
     """Test position of value."""
-    line_infos = ContainerLineInfo(JSON_EXAMPLE)
+    line_infos = ContainerLineInfo(JSON_EXAMPLE, {})
     doc = line_infos.json_str.splitlines()
 
     assert line_infos.pos_of_value(0, doc[0]) == (1, 1)

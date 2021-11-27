@@ -5,9 +5,11 @@ r"""Json line info.
 """
 # %% Import
 # Standard library imports
-import re
 import json
-from typing import List, Tuple
+import re
+from typing import List, NamedTuple, Tuple, Optional, Dict
+
+# Local imports
 from json_formatting import PrettyJsonEncoder
 
 
@@ -20,13 +22,26 @@ class ValueKind:
     STR = 3
 
 
+class ValueData(NamedTuple):
+    """Value Data."""
+
+    display: str
+    data: str
+
+
 class LineInfo:
     """Class for Information of the line of json."""
 
-    def __init__(self, pos_start_of_value: int, val_type: int):
+    def __init__(
+        self,
+        pos_start_of_value: int,
+        val_type: int,
+        val_list: Optional[List[ValueData]] = None,
+    ):
         """."""
         self.pos_start: int = pos_start_of_value
         self.val_type = val_type
+        self.val_list = val_list
         self.end_char: str = {
             ValueKind.NONE: "",
             ValueKind.NUM: "",
@@ -35,7 +50,10 @@ class LineInfo:
         }[val_type]
 
         self.chars_allowed: str = ""  # Editable charaters in editor.
-        if val_type in [ValueKind.NUM, ValueKind.NUM_LIST]:
+
+        if val_list is not None:
+            pass
+        elif val_type in (ValueKind.NUM, ValueKind.NUM_LIST):
             self.chars_allowed = "-.0123456789eE "
         elif val_type == ValueKind.STR:
             self.chars_allowed = (
@@ -49,10 +67,11 @@ class LineInfo:
 class ContainerLineInfo:
     """Container for json line info."""
 
-    def __init__(self, json_str: str):
+    def __init__(self, json_str: str, key_val_list: Dict[str, List[ValueData]]):
         """."""
         self.json_str: str = ""
         self.line_infos: List[LineInfo] = []
+        self.key_val_list = key_val_list
         self.parse_json(json_str)
 
     def parse_json(self, json_str: str):
@@ -61,20 +80,23 @@ class ContainerLineInfo:
         # Each line is formatted to have no more than one key and no more than one value
         self.json_str: str = json.dumps(json_parsed, cls=PrettyJsonEncoder, indent=2)
 
+        # if key_pattern is changed, check self.key_val_list.get line.
         key_pattern = re.compile(r'^([ ]*".*": )')
         space_pattern = re.compile(r"^([ ]*)")
 
         for line in self.json_str.splitlines():
             key = key_pattern.match(line)
             space = space_pattern.match(line)
+            val_list = None
 
-            if (line.strip() in ["{", "}", "},", "[", "]", "],"]) or (
-                line[-1] in ["{", "["]
+            if (line.strip() in ("{", "}", "},", "[", "]", "],")) or (
+                line[-1] in ("{", "[")
             ):  # the line has no value.
                 pos_start, val_type = len(line), ValueKind.NONE
             else:
                 if key:  # the line has key.
                     pos = key.end()
+                    val_list = self.key_val_list.get(key[0].strip()[1:-2], None)
                 elif space:
                     pos = space.end()
                 else:
@@ -88,7 +110,7 @@ class ContainerLineInfo:
                 else:
                     pos_start, val_type = pos, ValueKind.NUM
 
-            self.line_infos.append(LineInfo(pos_start, val_type))
+            self.line_infos.append(LineInfo(pos_start, val_type, val_list))
 
     def __getitem__(self, idx: int) -> LineInfo:
         """Get LineInfo."""

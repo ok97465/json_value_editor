@@ -1,7 +1,6 @@
 """To modify only the Json Value."""
 # %% Import
 # Standard library imports
-import re
 import sys
 from typing import Tuple
 
@@ -9,17 +8,125 @@ from typing import Tuple
 import qdarkstyle
 from PyQt5.Qsci import QsciLexerJSON, QsciScintilla
 from PyQt5.QtCore import QPoint, Qt
-from PyQt5.QtGui import QColor, QFont, QKeyEvent, QKeySequence, QMouseEvent
-from PyQt5.QtWidgets import QApplication, QMainWindow
+from PyQt5.QtGui import QColor, QFont, QKeyEvent, QMouseEvent
+from PyQt5.QtWidgets import (
+    QApplication,
+    QListWidget,
+    QListWidgetItem,
+    QMainWindow,
+    QListView,
+)
 
 # Local imports
-from json_infos import ContainerLineInfo, ValueKind
+from json_infos import ContainerLineInfo, ValueData, ValueKind
+
+
+class SelectionWidget(QListWidget):
+    """Selection list widget."""
+
+    def __init__(self, editor, ancestor) -> None:
+        """."""
+        super().__init__(ancestor)
+        self.editor = editor
+        self.setWindowFlags(Qt.SubWindow | Qt.FramelessWindowHint)
+        self.hide()
+        self.line_no: int = 0
+
+        self.setMinimumWidth(300)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.setResizeMode(QListView.Adjust)
+        self.setAutoScroll(False)
+        self.setSpacing(2)
+
+    def keyPressEvent(self, e: QKeyEvent):
+        """Override Qt method."""
+        key = e.key()
+
+        if key in (Qt.Key_Return, Qt.Key_Enter):
+            self.item_selected()
+        elif key == Qt.Key_Escape:
+            self.hide()
+        elif key in (
+            Qt.Key_Up,
+            Qt.Key_Down,
+            Qt.Key_PageUp,
+            Qt.Key_PageDown,
+            Qt.Key_Home,
+            Qt.Key_End,
+        ):
+            super().keyPressEvent(e)
+
+    def item_selected(self, item=None):
+        """Perform the item selected action."""
+        if item is None:
+            item = self.currentItem()
+        data = item.data(Qt.UserRole)
+
+        if data:
+            editor = self.editor
+            pos_start_of_val, pos_end_of_val = self.editor.pos_of_value(self.line_no)
+            editor.setSelection(
+                self.line_no, pos_start_of_val, self.line_no, pos_end_of_val
+            )
+            editor.replaceSelectedText(data)
+
+        self.hide()
+
+    def hide(self):
+        """Hide self, and focus to editor."""
+        super().hide()
+        self.editor.setFocus()
+
+    def move_to_val_pos(self, line_no: int):
+        """Move selection widget to starting position of value in editor."""
+        editor = self.editor
+        pos_start_value = editor.start_pos_of_value(line_no)
+        pos_sci = editor.SendScintilla(editor.SCI_FINDCOLUMN, line_no, pos_start_value)
+        pos_x = editor.SendScintilla(editor.SCI_POINTXFROMPOSITION, 0, pos_sci)
+        pos_y = editor.SendScintilla(editor.SCI_POINTYFROMPOSITION, 0, pos_sci)
+        height = editor.SendScintilla(editor.SCI_TEXTHEIGHT, line_no)
+
+        self.move(pos_x, pos_y + height)
+
+    def show_at_line(self, line_no: int):
+        """Show widget in editor."""
+        self.line_no = line_no
+        editor = self.editor
+        val_list = editor.line_infos[line_no].val_list
+        if val_list is None:
+            self.hide()
+            return
+        self.clear()
+
+        for idx, val_data in enumerate(val_list):
+            item = QListWidgetItem()
+            item.setData(Qt.DisplayRole, val_data.display)
+            item.setData(Qt.UserRole, val_data.data)
+            if idx % 2:
+                item.setBackground(QColor(20, 20, 49))
+            else:
+                item.setBackground(QColor(18, 32, 49))
+            self.addItem(item)
+
+        self.show()
+        self.setFocus()
+        self.raise_()
+
+        self.move_to_val_pos(line_no)
+        self.setCurrentRow(0)
+
+        self.setFixedSize(
+            self.sizeHintForColumn(0) + 4 * (self.frameWidth() + self.spacing()),
+            self.sizeHintForRow(0) * self.count()
+            + 4 * (self.frameWidth() + self.spacing()),
+        )
 
 
 class JsonValueEditor(QsciScintilla):
     """."""
 
-    def __init__(self, json_str: str, parent=None):
+    def __init__(self, json_str: str, parent=None, key_val_list={}):
         """."""
         super().__init__(parent)
         json_lexer = QsciLexerJSON(self)
@@ -52,11 +159,14 @@ class JsonValueEditor(QsciScintilla):
 
         self.setMargins(0)
         self.setLexer(json_lexer)
-        self.line_infos = ContainerLineInfo(json_str)
+        self.line_infos = ContainerLineInfo(json_str, key_val_list)
         self.setText(self.line_infos.json_str)
         self.setCursorPosition(1, self.start_pos_of_value(1))
 
         self.mouse_clicked = False
+
+        # selection widget
+        self.selection_widget = SelectionWidget(self, parent)
 
     def start_pos_of_value(self, line_no: int) -> int:
         """Return the starting position of Value in the line."""
@@ -104,6 +214,8 @@ class JsonValueEditor(QsciScintilla):
         self.mouse_clicked = False
         super().mouseReleaseEvent(e)
         self.validate_selection()
+        line_no, _ = self.get_cusor_pos_from_qmousepos(e.pos())
+        self.selection_widget.show_at_line(line_no)
 
     def mouseDoubleClickEvent(self, e: QMouseEvent) -> None:
         """Prevent select property of json."""
@@ -190,17 +302,14 @@ class JsonValueEditor(QsciScintilla):
         """Process key event."""
         line_no, _ = self.getCursorPosition()
         chars_allowed = self.line_infos[line_no].chars_allowed
+        val_list = self.line_infos[line_no].val_list
 
         ctrl_only_pressed = e.modifiers() == Qt.ControlModifier
-        key = e.key()
-        if key == Qt.Key_Space:
-            key_char = " "
-        else:
-            key_char = QKeySequence(key).toString()
+        key_char, key = e.text(), e.key()
 
-        if self.mouse_clicked or key in [Qt.Key_Return]:
+        if self.mouse_clicked or key in (Qt.Key_Return, Qt.Key_Enter):
             return
-        if ctrl_only_pressed and key in [Qt.Key_Z, Qt.Key_Y, Qt.Key_C]:  # shortcut
+        if ctrl_only_pressed and key in (Qt.Key_Z, Qt.Key_Y, Qt.Key_C):  # shortcut
             super().keyPressEvent(e)
         elif key in [
             Qt.Key_Left,
@@ -213,13 +322,15 @@ class JsonValueEditor(QsciScintilla):
             Qt.Key_PageUp,
         ]:  # Arrow keys
             super().keyPressEvent(e)
+        elif val_list and key == Qt.Key_Tab:
+            self.selection_widget.show_at_line(line_no)
         elif self.hasSelectedText():
-            if key_char in chars_allowed or key in [Qt.Key_Backspace, Qt.Key_Delete]:
+            if key_char in chars_allowed or key in (Qt.Key_Backspace, Qt.Key_Delete):
                 if set(self.selectedText()) <= set(chars_allowed):
                     super().keyPressEvent(e)
         elif key_char in chars_allowed:
             super().keyPressEvent(e)
-        elif key in [Qt.Key_Backspace, Qt.Key_Delete]:
+        elif key in (Qt.Key_Backspace, Qt.Key_Delete):
             if key == Qt.Key_Backspace:
                 char = self.get_prev_char()
             else:
@@ -229,6 +340,11 @@ class JsonValueEditor(QsciScintilla):
 
         self.validate_selection()
         self.validate_cursor_pos()
+
+        # Show value list
+        line_no_new, _ = self.getCursorPosition()
+        if line_no_new != line_no:
+            self.selection_widget.show_at_line(line_no_new)
 
 
 class MainWindow(QMainWindow):
@@ -245,8 +361,16 @@ class MainWindow(QMainWindow):
       "dh2": {"kk": 55, "yy":"widn", "sdknw": [1,2,{"dhrwodn": 44}]}},
   "fc": 9e9 }
 """
+        key_val_list = {
+            "kk": [ValueData("Wow : 11", "11"), ValueData("Hwowodinxk: 55", "55")],
+            "yy": [
+                ValueData("value1", "value1"),
+                ValueData("widn", "widn"),
+                ValueData("anrndghk Rhcdl", "diwndkwosn"),
+            ],
+        }
         super().__init__(parent)
-        widget = JsonValueEditor(json_example)
+        widget = JsonValueEditor(json_example, self, key_val_list)
         widget.setMinimumSize(1600, 1200)
         self.setCentralWidget(widget)
 

@@ -2,7 +2,10 @@
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 
-![DEMO](/doc/demo.gif)
+|                      |                                    |
+|----------------------|------------------------------------|
+|![DEMO](/doc/demo.gif)|![DEMO LIST](/doc/demo_val_list.gif)|
+
 
 ## Overview
 This editor only allows you to modify values of json. 
