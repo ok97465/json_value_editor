@@ -38,6 +38,7 @@ class SelectionWidget(QListWidget):
         self.setResizeMode(QListView.Adjust)
         self.setAutoScroll(False)
         self.setSpacing(2)
+        self.itemClicked.connect(self.item_selected)
 
     def keyPressEvent(self, e: QKeyEvent):
         """Override Qt method."""
@@ -371,7 +372,7 @@ class MainWindow(QMainWindow):
         }
         super().__init__(parent)
         widget = JsonValueEditor(json_example, self, key_val_list)
-        widget.setMinimumSize(1600, 1200)
+        widget.setMinimumSize(800, 600)
         self.setCentralWidget(widget)
 
 
