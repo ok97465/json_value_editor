@@ -35,9 +35,9 @@ class SelectionWidget(QListWidget):
 
         self.setMinimumWidth(300)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
         self.setResizeMode(QListView.Adjust)
-        self.setAutoScroll(False)
+        self.setAutoScroll(True)
         self.setSpacing(2)
         self.itemClicked.connect(self.item_selected)
 
@@ -91,6 +91,11 @@ class SelectionWidget(QListWidget):
 
         self.move(pos_x, pos_y + height)
 
+    def focusOutEvent(self, e):
+        """Override qt method."""
+        self.hide()
+        super().focusOutEvent(e)
+
     def show_at_line(self, line_no: int):
         """Show widget in editor."""
         self.line_no = line_no
@@ -117,9 +122,12 @@ class SelectionWidget(QListWidget):
 
         self.move_to_val_pos(line_no)
         self.setCurrentRow(0)
+        scroll_bar = self.verticalScrollBar()
 
         self.setFixedSize(
-            self.sizeHintForColumn(0) + 4 * (self.frameWidth() + self.spacing()),
+            self.sizeHintForColumn(0)
+            + 4 * (self.frameWidth() + self.spacing())
+            + scroll_bar.width(),
             self.sizeHintForRow(0) * self.count()
             + 4 * (self.frameWidth() + self.spacing()),
         )
