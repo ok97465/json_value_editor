@@ -16,6 +16,8 @@ from PyQt5.QtWidgets import (
     QListWidgetItem,
     QMainWindow,
     QListView,
+    QGridLayout,
+    QWidget,
 )
 
 # Local imports
@@ -28,6 +30,7 @@ class SelectionWidget(QListWidget):
     def __init__(self, editor, ancestor) -> None:
         """."""
         super().__init__(ancestor)
+        self.parent = ancestor
         self.editor = editor
         self.setWindowFlags(Qt.SubWindow | Qt.FramelessWindowHint)
         self.hide()
@@ -89,7 +92,10 @@ class SelectionWidget(QListWidget):
         pos_y = editor.SendScintilla(editor.SCI_POINTYFROMPOSITION, 0, pos_sci)
         height = editor.SendScintilla(editor.SCI_TEXTHEIGHT, line_no)
 
-        self.move(pos_x, pos_y + height)
+        pos_local = QPoint(pos_x, pos_y + height)
+        pos_editor = editor.mapToParent(editor.rect().topLeft())
+
+        self.move(pos_editor + pos_local)
 
     def focusOutEvent(self, e):
         """Override qt method."""
@@ -383,9 +389,16 @@ class MainWindow(QMainWindow):
             ],
         }
         super().__init__(parent)
-        widget = JsonValueEditor(json_example, self, key_val_list)
-        widget.setMinimumSize(800, 600)
-        self.setCentralWidget(widget)
+        layout = QGridLayout()
+        layout.addWidget(JsonValueEditor(json_example, self, key_val_list), 0, 0)
+        layout.addWidget(JsonValueEditor(json_example, self, key_val_list), 0, 1)
+        layout.addWidget(JsonValueEditor(json_example, self, key_val_list), 1, 0)
+        layout.addWidget(JsonValueEditor(json_example, self, key_val_list), 1, 1)
+
+        w = QWidget(self)
+        w.setLayout(layout)
+        self.setMinimumSize(800, 600)
+        self.setCentralWidget(w)
 
 
 if __name__ == "__main__":
