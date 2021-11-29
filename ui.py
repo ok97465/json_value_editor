@@ -2,6 +2,7 @@
 # %% Import
 # Standard library imports
 import sys
+import json
 from typing import Tuple
 
 # Third party imports
@@ -162,12 +163,15 @@ class JsonValueEditor(QsciScintilla):
         self.setLexer(json_lexer)
         self.line_infos = ContainerLineInfo(json_str, key_val_list)
         self.setText(self.line_infos.json_str)
-        self.setCursorPosition(1, self.start_pos_of_value(1))
 
         self.mouse_clicked = False
 
         # selection widget
         self.selection_widget = SelectionWidget(self, parent)
+
+    def to_dict(self) -> dict:
+        """To dict."""
+        return json.loads(self.text())
 
     def start_pos_of_value(self, line_no: int) -> int:
         """Return the starting position of Value in the line."""
